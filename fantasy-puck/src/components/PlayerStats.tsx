@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 
 interface Player {
   playerId: number;
@@ -18,6 +18,15 @@ interface Player {
   shPoints: number;
   fantasyPoints?: number;
   fantasyPointsPerGame?: number;
+  // ESPN Fantasy Data
+  espnADP?: number | null;
+  espnPercentOwned?: number;
+  espnPercentStarted?: number;
+  espnTotalRanking?: number | null;
+  espnPositionalRanking?: number | null;
+  // Calculated fields
+  customRank?: number;
+  valueScore?: number;
 }
 
 interface Weights {
@@ -31,8 +40,9 @@ interface Weights {
 }
 
 const PlayerStats: React.FC = () => {
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [rawPlayers, setRawPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Player; direction: "asc" | "desc" }>({
     key: "fantasyPoints",
     direction: "desc",
@@ -48,48 +58,39 @@ const PlayerStats: React.FC = () => {
     ppPoints: 2,
   });
 
+  // Fetch player data only once on mount
   useEffect(() => {
     const fetchPlayers = async () => {
+      setLoading(true);
+      setError(null);
+
       try {
-        const res = await fetch("http://localhost:3000/players");
+        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+        const res = await fetch(`${apiUrl}/players`);
+
+        if (!res.ok) {
+          throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+        }
+
         const data = await res.json();
 
-        const withFantasy = data.data.map((p: Player) => {
-          const fantasyPoints =
-            p.goals * weights.goals +
-            p.assists * weights.assists +
-            p.plusMinus * weights.plusMinus +
-            p.hits * weights.hits +
-            p.blockedShots * weights.blockedShots +
-            p.shots * weights.shots +
-            p.ppPoints * weights.ppPoints;
+        if (!data.data || !Array.isArray(data.data)) {
+          throw new Error("Invalid response format from server");
+        }
 
-          const fantasyPointsPerGame =
-            p.gamesPlayed > 0 ? fantasyPoints / p.gamesPlayed : 0;
-
-          return {
-            ...p,
-            fantasyPoints,
-            fantasyPointsPerGame,
-          };
-        });
-
-        const sorted = sortData(withFantasy, sortConfig.key, sortConfig.direction);
-        setPlayers(sorted);
+        setRawPlayers(data.data);
       } catch (err) {
         console.error("Failed to fetch players:", err);
+        setError(err instanceof Error ? err.message : "Failed to load player data");
       } finally {
         setLoading(false);
       }
     };
 
     fetchPlayers();
-  }, [weights]);
+  }, []); // Only fetch once on mount
 
-  const handleWeightChange = (key: keyof Weights, value: number) => {
-    setWeights({ ...weights, [key]: value });
-  };
-
+  // Helper function to sort data
   const sortData = (
     data: Player[],
     key: keyof Player,
@@ -104,16 +105,123 @@ const PlayerStats: React.FC = () => {
     });
   };
 
+  // Calculate fantasy points whenever weights or rawPlayers change (client-side only)
+  const playersWithFantasy = useMemo(() => {
+    return rawPlayers.map((p: Player) => {
+      const fantasyPoints =
+        p.goals * weights.goals +
+        p.assists * weights.assists +
+        p.plusMinus * weights.plusMinus +
+        p.hits * weights.hits +
+        p.blockedShots * weights.blockedShots +
+        p.shots * weights.shots +
+        p.ppPoints * weights.ppPoints;
+
+      const fantasyPointsPerGame =
+        p.gamesPlayed > 0 ? fantasyPoints / p.gamesPlayed : 0;
+
+      return {
+        ...p,
+        fantasyPoints,
+        fantasyPointsPerGame,
+      };
+    });
+  }, [rawPlayers, weights]);
+
+  // Sort players and calculate custom rank + value score
+  const sortedPlayers = useMemo(() => {
+    // First, create a ranking based on fantasy points (descending)
+    const rankedByFantasy = [...playersWithFantasy].sort((a, b) => {
+      const aFP = a.fantasyPoints ?? 0;
+      const bFP = b.fantasyPoints ?? 0;
+      return bFP - aFP; // Descending order
+    });
+
+    // Assign custom ranks and calculate value scores
+    const playersWithRanks = rankedByFantasy.map((player, index) => {
+      const customRank = index + 1;
+      const espnADP = player.espnADP;
+
+      // Value Score: positive = undervalued, negative = overvalued
+      // If ESPN ADP is 100 and custom rank is 50, value is +50 (good pick!)
+      const valueScore =
+        espnADP && espnADP > 0 ? espnADP - customRank : null;
+
+      return {
+        ...player,
+        customRank,
+        valueScore,
+      };
+    });
+
+    // Then apply the user's selected sort
+    return sortData(playersWithRanks, sortConfig.key, sortConfig.direction);
+  }, [playersWithFantasy, sortConfig]);
+
+  const handleWeightChange = (key: keyof Weights, value: number) => {
+    setWeights({ ...weights, [key]: value });
+  };
+
   const handleSort = (key: keyof Player) => {
     let direction: "asc" | "desc" = "desc";
     if (sortConfig.key === key && sortConfig.direction === "desc") {
       direction = "asc";
     }
     setSortConfig({ key, direction });
-    setPlayers(sortData(players, key, direction));
   };
 
-  if (loading) return <p>Loading players...</p>;
+  // Loading state
+  if (loading) {
+    return (
+      <div style={{ padding: "20px", textAlign: "center" }}>
+        <h1>NHL Fantasy Rankings</h1>
+        <div style={{ marginTop: "40px", fontSize: "18px", color: "#666" }}>
+          <p>Loading player data...</p>
+          <p style={{ fontSize: "14px", marginTop: "10px" }}>
+            Fetching stats from NHL API
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div style={{ padding: "20px", textAlign: "center" }}>
+        <h1>NHL Fantasy Rankings</h1>
+        <div
+          style={{
+            marginTop: "40px",
+            padding: "20px",
+            backgroundColor: "#fee",
+            border: "1px solid #fcc",
+            borderRadius: "8px",
+            maxWidth: "600px",
+            marginLeft: "auto",
+            marginRight: "auto",
+          }}
+        >
+          <h2 style={{ color: "#c00", marginBottom: "10px" }}>Error Loading Data</h2>
+          <p style={{ color: "#666", marginBottom: "20px" }}>{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: "#007bff",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const renderSortArrow = (key: keyof Player) => {
     if (sortConfig.key !== key) return "↕";
@@ -174,6 +282,10 @@ const PlayerStats: React.FC = () => {
             ["PP Pts", "ppPoints"],
             ["Fantasy Pts", "fantasyPoints"],
             ["FPPG", "fantasyPointsPerGame"],
+            ["Custom Rank", "customRank"],
+            ["ESPN ADP", "espnADP"],
+            ["ESPN Rank", "espnTotalRanking"],
+            ["Value", "valueScore"],
             ].map(([label, key]) => {
             const isSorted = sortConfig.key === (key as keyof Player);
             return (
@@ -193,7 +305,7 @@ const PlayerStats: React.FC = () => {
         </tr>
         </thead>
         <tbody>
-          {players.map((p, idx) => (
+          {sortedPlayers.map((p, idx) => (
             <tr key={p.playerId}>
               <td style={td}>{idx + 1}</td>
               <td style={td}>{p.skaterFullName}</td>
@@ -208,6 +320,31 @@ const PlayerStats: React.FC = () => {
               <td style={td}>{p.ppPoints}</td>
               <td style={td}>{p.fantasyPoints?.toFixed(1)}</td>
               <td style={td}>{p.fantasyPointsPerGame?.toFixed(2)}</td>
+              <td style={td}>{p.customRank || "-"}</td>
+              <td style={td}>{p.espnADP ? Math.round(p.espnADP) : "-"}</td>
+              <td style={td}>{p.espnTotalRanking || "-"}</td>
+              <td
+                style={{
+                  ...td,
+                  fontWeight: "bold",
+                  color:
+                    p.valueScore === null || p.valueScore === undefined
+                      ? "#666"
+                      : p.valueScore > 50
+                      ? "#0a0" // Dark green for high value
+                      : p.valueScore > 20
+                      ? "#0c0" // Green for good value
+                      : p.valueScore > 0
+                      ? "#090" // Light green for slight value
+                      : p.valueScore > -20
+                      ? "#c60" // Orange for slight overvalue
+                      : "#c00", // Red for overvalued
+                }}
+              >
+                {p.valueScore !== null && p.valueScore !== undefined
+                  ? (p.valueScore > 0 ? "+" : "") + p.valueScore.toFixed(0)
+                  : "-"}
+              </td>
             </tr>
           ))}
         </tbody>
