@@ -4,6 +4,7 @@ interface Player {
   playerId: number;
   skaterFullName: string;
   teamAbbrevs: string;
+  positionCode: string;
   goals: number;
   assists: number;
   points: number;
@@ -57,6 +58,12 @@ const PlayerStats: React.FC = () => {
     shots: 0.9,
     ppPoints: 2,
   });
+
+  const [positionFilters, setPositionFilters] = useState<Set<string>>(
+    new Set(["C", "L", "R", "D"])
+  );
+
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   // Fetch player data only once on mount
   useEffect(() => {
@@ -130,8 +137,24 @@ const PlayerStats: React.FC = () => {
 
   // Sort players and calculate custom rank + value score
   const sortedPlayers = useMemo(() => {
-    // First, create a ranking based on fantasy points (descending)
-    const rankedByFantasy = [...playersWithFantasy].sort((a, b) => {
+    // First, filter by search term
+    let filteredPlayers = playersWithFantasy;
+
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      filteredPlayers = filteredPlayers.filter((p) =>
+        p.skaterFullName.toLowerCase().includes(searchLower) ||
+        p.teamAbbrevs.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Then filter by selected positions
+    filteredPlayers = filteredPlayers.filter((p) =>
+      positionFilters.has(p.positionCode)
+    );
+
+    // Then, create a ranking based on fantasy points (descending)
+    const rankedByFantasy = [...filteredPlayers].sort((a, b) => {
       const aFP = a.fantasyPoints ?? 0;
       const bFP = b.fantasyPoints ?? 0;
       return bFP - aFP; // Descending order
@@ -156,7 +179,7 @@ const PlayerStats: React.FC = () => {
 
     // Then apply the user's selected sort
     return sortData(playersWithRanks, sortConfig.key, sortConfig.direction);
-  }, [playersWithFantasy, sortConfig]);
+  }, [playersWithFantasy, sortConfig, positionFilters, searchTerm]);
 
   const handleWeightChange = (key: keyof Weights, value: number) => {
     setWeights({ ...weights, [key]: value });
@@ -258,6 +281,85 @@ const PlayerStats: React.FC = () => {
         ))}
       </div>
 
+      {/* Search Box */}
+      <div
+        style={{
+          marginBottom: "15px",
+          maxWidth: "800px",
+        }}
+      >
+        <input
+          type="text"
+          placeholder="Search by player name or team..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            fontSize: "16px",
+            border: "2px solid #ddd",
+            borderRadius: "8px",
+            boxSizing: "border-box",
+            outline: "none",
+            transition: "border-color 0.2s",
+          }}
+          onFocus={(e) => (e.target.style.borderColor = "#007bff")}
+          onBlur={(e) => (e.target.style.borderColor = "#ddd")}
+        />
+      </div>
+
+      {/* Position Filter */}
+      <div
+        style={{
+          marginBottom: "20px",
+          padding: "15px",
+          backgroundColor: "#f5f5f5",
+          borderRadius: "8px",
+          maxWidth: "800px",
+        }}
+      >
+        <h3 style={{ marginTop: 0, marginBottom: "10px", fontSize: "16px" }}>
+          Filter by Position:
+        </h3>
+        <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+          {[
+            { code: "C", label: "Center" },
+            { code: "L", label: "Left Wing" },
+            { code: "R", label: "Right Wing" },
+            { code: "D", label: "Defense" },
+          ].map(({ code, label }) => (
+            <label
+              key={code}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={positionFilters.has(code)}
+                onChange={(e) => {
+                  const newFilters = new Set(positionFilters);
+                  if (e.target.checked) {
+                    newFilters.add(code);
+                  } else {
+                    newFilters.delete(code);
+                  }
+                  setPositionFilters(newFilters);
+                }}
+                style={{ marginRight: "6px", cursor: "pointer" }}
+              />
+              <span>{label} ({code})</span>
+            </label>
+          ))}
+        </div>
+        <div style={{ marginTop: "10px", fontSize: "13px", color: "#666" }}>
+          Showing {sortedPlayers.length} player{sortedPlayers.length !== 1 ? "s" : ""}
+        </div>
+      </div>
+
       {/* Player Table */}
       <table
         style={{
@@ -272,6 +374,7 @@ const PlayerStats: React.FC = () => {
             ["#", "playerId"],
             ["Player", "skaterFullName"],
             ["Team", "teamAbbrevs"],
+            ["Pos", "positionCode"],
             ["GP", "gamesPlayed"],
             ["G", "goals"],
             ["A", "assists"],
@@ -310,6 +413,7 @@ const PlayerStats: React.FC = () => {
               <td style={td}>{idx + 1}</td>
               <td style={td}>{p.skaterFullName}</td>
               <td style={td}>{p.teamAbbrevs}</td>
+              <td style={td}>{p.positionCode}</td>
               <td style={td}>{p.gamesPlayed}</td>
               <td style={td}>{p.goals}</td>
               <td style={td}>{p.assists}</td>
