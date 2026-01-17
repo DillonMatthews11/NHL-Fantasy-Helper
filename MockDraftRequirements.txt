@@ -1,0 +1,195 @@
+Below is a **Claude Code Max–optimized prompt**. This is written in the style that works best when pasted directly into Claude Code (clear role, constraints, step-by-step expectations, and implementation guidance).
+
+---
+
+## Claude Code Max Prompt: Fantasy Hockey Mock Draft Simulator
+
+**Role:**
+You are a senior full-stack engineer and product designer building an interactive **Fantasy Hockey Mock Draft Simulator** for a website. Your goal is to design and implement a production-ready feature with clean architecture, realistic draft logic, and a strong user experience.
+
+---
+
+## High-Level Objective
+
+Build a **Fantasy Hockey Mock Draft Simulator** that allows a user to configure league settings, select a draft position, and complete a **snake draft** against CPU-controlled teams that draft intelligently based on ADP, positional need, and roster construction.
+
+The simulator must be modular, extensible, and data-driven.
+
+---
+
+## Core Requirements
+
+### 1. League Configuration (Pre-Draft Setup)
+
+Implement a setup flow that allows the user to configure:
+
+* Number of teams (e.g. 8–16)
+* Draft format:
+
+  * Snake draft only
+* Draft position selection (user chooses their pick slot)
+* Draft timer per pick:
+
+  * User-defined (e.g. 30s, 60s, 90s, unlimited)
+* Roster configuration (fully customizable):
+
+  * Positions supported:
+
+    * C, LW, RW, D, G
+    * FLEX positions: Forward (F), Utility (UTIL)
+  * User can define **how many roster spots per position**
+  * User can define **number of bench spots**
+* Validate roster logic (no negative values, sensible totals)
+
+Roster size should be computed dynamically.
+
+---
+
+### 2. Draft Room UI (Tabbed Interface)
+
+Implement a draft room with **three tabs**:
+
+---
+
+#### Tab 1: Available Players (Draft Board)
+
+* List all undrafted players
+* Player data fields:
+
+  * Name
+  * Position(s)
+  * NHL team
+  * ADP (Average Draft Position)
+  * Optional: projected points or ranking
+* Features:
+
+  * Draft player directly from this list
+  * Position filters (C, LW, RW, D, G, etc.)
+  * Text search
+  * Sorting by ADP, name, or position
+* List updates live as players are drafted
+
+---
+
+#### Tab 2: My Team
+
+* Display the user’s drafted roster
+* Group players by:
+
+  * Starting roster positions
+  * Bench
+* Visually indicate:
+
+  * Filled vs unfilled roster spots
+  * Remaining positional needs
+* Prevent illegal picks (e.g. exceeding position limits unless bench)
+
+---
+
+#### Tab 3: Full Draft Board
+
+* A full draft history table showing **every pick**
+* Columns:
+
+  * Overall pick number
+  * Round
+  * Team
+  * Player
+  * Position
+* Updates in real time
+* Scrollable and readable for long drafts
+
+---
+
+### 3. Draft Flow & Logic
+
+* Draft proceeds automatically for CPU teams
+* User manually drafts during their pick
+* Draft timer enforcement:
+
+  * If timer expires, auto-pick best available player
+* Show:
+
+  * Current team on the clock
+  * Pick number
+  * Upcoming picks
+
+---
+
+### 4. CPU Drafting Logic (Critical)
+
+CPU teams must draft realistically using a weighted system:
+
+Factors to include:
+
+* **ADP** (primary baseline)
+* **Positional need** (based on roster configuration)
+* **Roster balance** (avoid extreme over-stacking early)
+* **Value-based drafting** (don’t blindly follow ADP)
+
+Guidelines:
+
+* CPUs should respect roster limits
+* Goalies should generally be drafted later unless required
+* Bench picks prioritize best player available
+* Slight randomness to avoid identical drafts
+
+Design CPU logic to be **configurable and extensible**.
+
+---
+
+### 5. Data & Architecture
+
+* Player pool should be loaded from a structured data source (JSON or API-ready)
+* Player objects should include:
+
+  * id
+  * name
+  * positions[]
+  * team
+  * ADP
+  * optional projections
+* Draft state should be centrally managed
+* Code should be modular:
+
+  * Draft engine
+  * CPU logic
+  * UI state
+  * Player data
+
+---
+
+### 6. UX & Technical Expectations
+
+* Clean, modern fantasy-sports UI
+* Responsive (desktop-first)
+* No unnecessary page reloads
+* Clear visual indicators for:
+
+  * User picks
+  * CPU picks
+  * Draft progress
+
+---
+
+## Output Expectations
+
+When generating code or plans:
+
+1. Start by outlining **system architecture**
+2. Define **data models**
+3. Implement **draft engine logic**
+4. Implement **CPU draft decision logic**
+5. Build **UI components**
+6. Ensure logic correctness and edge-case handling
+
+Code should be readable, maintainable, and ready for real-world use.
+
+---
+
+## End Goal
+
+A fully functional **Fantasy Hockey Mock Draft Simulator** that feels realistic, customizable, and replayable, allowing users to practice drafting from any position against intelligent CPU opponents.
+
+---
+

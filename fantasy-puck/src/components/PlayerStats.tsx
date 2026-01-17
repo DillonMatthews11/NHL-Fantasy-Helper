@@ -168,7 +168,7 @@ const PlayerStats: React.FC = () => {
       // Value Score: positive = undervalued, negative = overvalued
       // If ESPN ADP is 100 and custom rank is 50, value is +50 (good pick!)
       const valueScore =
-        espnADP && espnADP > 0 ? espnADP - customRank : null;
+        espnADP && espnADP > 0 ? espnADP - customRank : undefined;
 
       return {
         ...player,
