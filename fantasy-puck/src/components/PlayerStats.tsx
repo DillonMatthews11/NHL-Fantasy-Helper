@@ -26,8 +26,24 @@ interface Player {
   espnTotalRanking?: number | null;
   espnPositionalRanking?: number | null;
   // Calculated fields
-  customRank?: number;
+  customRank?: number; // Rank among skaters only
+  overallCustomRank?: number; // Rank among ALL players (skaters + goalies)
   valueScore?: number;
+}
+
+interface Goalie {
+  playerId: number;
+  skaterFullName: string;
+  teamAbbrevs: string;
+  positionCode: string;
+  gamesPlayed: number;
+  wins: number;
+  saves: number;
+  savePct: number;
+  goalsAgainstAverage: number;
+  shutouts: number;
+  espnADP?: number | null;
+  fantasyPoints?: number;
 }
 
 interface Weights {
@@ -38,6 +54,13 @@ interface Weights {
   blockedShots: number;
   shots: number;
   ppPoints: number;
+}
+
+interface GoalieWeights {
+  wins: number;
+  saves: number;
+  shutouts: number;
+  goalsAgainst: number;
 }
 
 const PlayerStats: React.FC = () => {
@@ -57,6 +80,13 @@ const PlayerStats: React.FC = () => {
     blockedShots: 1,
     shots: 0.9,
     ppPoints: 2,
+  });
+
+  const [goalieWeights] = useState<GoalieWeights>({
+    wins: 5,
+    saves: 0.6,
+    shutouts: 5,
+    goalsAgainst: -3,
   });
 
   const [positionFilters, setPositionFilters] = useState<Set<string>>(
@@ -112,9 +142,9 @@ const PlayerStats: React.FC = () => {
     });
   };
 
-  // Calculate fantasy points whenever weights or rawPlayers change (client-side only)
-  const playersWithFantasy = useMemo(() => {
-    return rawPlayers.map((p: Player) => {
+  // Separate skaters and goalies from rawPlayers, calculate fantasy points for each
+  const allPlayersWithFantasy = useMemo(() => {
+    const skaters = rawPlayers.filter((p: Player) => p.positionCode !== 'G').map((p: Player) => {
       const fantasyPoints =
         p.goals * weights.goals +
         p.assists * weights.assists +
@@ -133,7 +163,51 @@ const PlayerStats: React.FC = () => {
         fantasyPointsPerGame,
       };
     });
-  }, [rawPlayers, weights]);
+
+    const goalies = rawPlayers.filter((p: any) => p.positionCode === 'G').map((g: any) => {
+      const goalsAgainst = g.goalsAgainstAverage * g.gamesPlayed;
+      const fantasyPoints =
+        (g.wins || 0) * goalieWeights.wins +
+        (g.saves || 0) * goalieWeights.saves +
+        (g.shutouts || 0) * goalieWeights.shutouts +
+        goalsAgainst * goalieWeights.goalsAgainst;
+
+      const fantasyPointsPerGame =
+        g.gamesPlayed > 0 ? fantasyPoints / g.gamesPlayed : 0;
+
+      return {
+        ...g,
+        fantasyPoints,
+        fantasyPointsPerGame,
+      };
+    });
+
+    // Combine all players
+    const allPlayers = [...skaters, ...goalies];
+
+    // Calculate overall rank across ALL players
+    const rankedOverall = [...allPlayers].sort((a, b) => {
+      const aFP = a.fantasyPoints ?? 0;
+      const bFP = b.fantasyPoints ?? 0;
+      return bFP - aFP;
+    });
+
+    const overallRankMap = new Map();
+    rankedOverall.forEach((player, idx) => {
+      overallRankMap.set(player.playerId, idx + 1);
+    });
+
+    // Add overall rank to all players
+    return allPlayers.map(player => ({
+      ...player,
+      overallCustomRank: overallRankMap.get(player.playerId),
+    }));
+  }, [rawPlayers, weights, goalieWeights]);
+
+  // Filter to just skaters for this page
+  const playersWithFantasy = useMemo(() => {
+    return allPlayersWithFantasy.filter((p: any) => p.positionCode !== 'G');
+  }, [allPlayersWithFantasy]);
 
   // Sort players and calculate custom rank + value score
   const sortedPlayers = useMemo(() => {
@@ -153,27 +227,29 @@ const PlayerStats: React.FC = () => {
       positionFilters.has(p.positionCode)
     );
 
-    // Then, create a ranking based on fantasy points (descending)
+    // Create a position-specific ranking (among skaters only) for display
     const rankedByFantasy = [...filteredPlayers].sort((a, b) => {
       const aFP = a.fantasyPoints ?? 0;
       const bFP = b.fantasyPoints ?? 0;
       return bFP - aFP; // Descending order
     });
 
-    // Assign custom ranks and calculate value scores
+    // Assign position-specific custom ranks and calculate value scores using overall rank
     const playersWithRanks = rankedByFantasy.map((player, index) => {
-      const customRank = index + 1;
+      const customRank = index + 1; // Position-specific rank (among filtered skaters)
       const espnADP = player.espnADP;
 
-      // Value Score: positive = undervalued, negative = overvalued
-      // If ESPN ADP is 100 and custom rank is 50, value is +50 (good pick!)
+      // Value Score: Use OVERALL custom rank (includes goalies) for accurate comparison to ADP
+      // If ESPN ADP is 100 and overall custom rank is 50, value is +50 (good pick!)
       const valueScore =
-        espnADP && espnADP > 0 ? espnADP - customRank : undefined;
+        espnADP && espnADP > 0 && player.overallCustomRank
+          ? espnADP - player.overallCustomRank
+          : undefined;
 
       return {
         ...player,
-        customRank,
-        valueScore,
+        customRank, // Display rank (skaters only)
+        valueScore, // Calculated using overallCustomRank
       };
     });
 
@@ -385,9 +461,11 @@ const PlayerStats: React.FC = () => {
             ["PP Pts", "ppPoints"],
             ["Fantasy Pts", "fantasyPoints"],
             ["FPPG", "fantasyPointsPerGame"],
-            ["Custom Rank", "customRank"],
+            ["Skater Rank", "customRank"],
+            ["Overall Rank", "overallCustomRank"],
             ["ESPN ADP", "espnADP"],
-            ["ESPN Rank", "espnTotalRanking"],
+            ["ESPN Pos Rank", "espnPositionalRanking"],
+            ["ESPN Overall", "espnTotalRanking"],
             ["Value", "valueScore"],
             ].map(([label, key]) => {
             const isSorted = sortConfig.key === (key as keyof Player);
@@ -425,7 +503,9 @@ const PlayerStats: React.FC = () => {
               <td style={td}>{p.fantasyPoints?.toFixed(1)}</td>
               <td style={td}>{p.fantasyPointsPerGame?.toFixed(2)}</td>
               <td style={td}>{p.customRank || "-"}</td>
+              <td style={td}>{p.overallCustomRank || "-"}</td>
               <td style={td}>{p.espnADP ? Math.round(p.espnADP) : "-"}</td>
+              <td style={td}>{p.espnPositionalRanking || "-"}</td>
               <td style={td}>{p.espnTotalRanking || "-"}</td>
               <td
                 style={{

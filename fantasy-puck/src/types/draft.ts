@@ -6,18 +6,27 @@ export interface DraftPlayer {
   playerId: string;
   skaterFullName: string;
   teamAbbrevs: string;
-  positionCode: string; // Can be multiple like "C/LW"
+  positionCode: string; // Can be multiple like "C/LW" or "G"
   positions: Position[]; // Parsed positions array
   espnADP: number;
   espnPercentOwned: number;
   espnTotalRanking: number;
   fantasyPoints?: number;
   fantasyPointsPerGame?: number;
-  // Additional stats for display
+  // Skater stats
   goals?: number;
   assists?: number;
   points?: number;
   gamesPlayed?: number;
+  // Goalie stats
+  wins?: number;
+  losses?: number;
+  otLosses?: number;
+  savePct?: number;
+  goalsAgainstAverage?: number;
+  shutouts?: number;
+  saves?: number;
+  shotsAgainst?: number;
 }
 
 // Roster configuration

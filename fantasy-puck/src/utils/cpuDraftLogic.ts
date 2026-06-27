@@ -79,14 +79,21 @@ function scorePlayerForCPU(
     }
   }
 
-  // Prioritize high-value positions (C, D) early
+  // Position scarcity adjustments early in draft
+  // Very subtle bonuses - ADP should still be primary driver
   if (currentPickNumber < 30) {
-    if (player.positions.includes('C')) {
-      score *= 1.1;
+    // Wingers are slightly more scarce than centers in hockey
+    if (player.positions.includes('RW')) {
+      score *= 1.03; // Right wings slightly scarce
     }
+    if (player.positions.includes('LW')) {
+      score *= 1.02; // Left wings slightly scarce
+    }
+    // Defensemen remain valuable
     if (player.positions.includes('D')) {
-      score *= 1.05;
+      score *= 1.02;
     }
+    // Centers are plentiful, no bonus needed
   }
 
   return score;

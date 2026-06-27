@@ -96,13 +96,16 @@ app.get("/players", async (req, res) => {
     const season = req.query.season || 20232024;
     const gameType = 2; // Regular season
 
-    // Fetch NHL stats and ESPN data in parallel
-    const [summaryRes, realtimeRes, espnMap] = await Promise.all([
+    // Fetch NHL stats (skaters + goalies) and ESPN data in parallel
+    const [summaryRes, realtimeRes, goalieRes, espnMap] = await Promise.all([
       axios.get(
         `${NHL_API_BASE}/stats/rest/en/skater/summary?limit=-1&cayenneExp=seasonId=${season}%20and%20gameTypeId=${gameType}`
       ),
       axios.get(
         `${NHL_API_BASE}/stats/rest/en/skater/realtime?limit=-1&cayenneExp=seasonId=${season}%20and%20gameTypeId=${gameType}`
+      ),
+      axios.get(
+        `${NHL_API_BASE}/stats/rest/en/goalie/summary?limit=-1&cayenneExp=seasonId=${season}%20and%20gameTypeId=${gameType}`
       ),
       fetchESPNData(),
     ]);
@@ -116,9 +119,9 @@ app.get("/players", async (req, res) => {
     const sampleNHLNames = summaryRes.data.data.slice(0, 5).map(p => p.skaterFullName.toLowerCase().trim());
     console.log("📝 Sample NHL names:", sampleNHLNames);
 
-    // Combine data sources (NHL + ESPN)
+    // Process skaters
     let matchedCount = 0;
-    const combined = summaryRes.data.data.map((p) => {
+    const skaters = summaryRes.data.data.map((p) => {
       const real = realtimeMap[p.playerId] || {};
       const playerName = p.skaterFullName.toLowerCase().trim();
       const espn = espnMap[playerName] || {};
@@ -156,17 +159,78 @@ app.get("/players", async (req, res) => {
       };
     });
 
-    // Log matching stats
-    console.log(`🔗 Matched ${matchedCount} out of ${combined.length} NHL players with ESPN data`);
+    // Process goalies
+    const goalies = goalieRes.data.data.map((g) => {
+      const playerName = g.goalieFullName.toLowerCase().trim();
+      const espn = espnMap[playerName] || {};
 
-    // Log a sample player to verify ESPN data is included
+      if (espn.adp) matchedCount++;
+
+      return {
+        playerId: g.playerId,
+        skaterFullName: g.goalieFullName, // Keep consistent field name
+        teamAbbrevs: g.teamAbbrevs,
+        positionCode: 'G',
+        gamesPlayed: g.gamesPlayed,
+        // Goalie-specific stats
+        wins: g.wins || 0,
+        losses: g.losses || 0,
+        otLosses: g.otLosses || 0,
+        savePct: g.savePct || 0,
+        goalsAgainstAverage: g.goalsAgainstAverage || 0,
+        shutouts: g.shutouts || 0,
+        saves: g.saves || 0,
+        shotsAgainst: g.shotsAgainst || 0,
+        // Set skater stats to 0 for consistency
+        goals: 0,
+        assists: 0,
+        points: 0,
+        plusMinus: 0,
+        shots: 0,
+        shootingPct: 0,
+        pointsPerGame: 0,
+        ppGoals: 0,
+        ppPoints: 0,
+        shGoals: 0,
+        shPoints: 0,
+        gameWinningGoals: 0,
+        hits: 0,
+        blockedShots: 0,
+        giveaways: 0,
+        takeaways: 0,
+        // ESPN Fantasy Data
+        espnADP: espn.adp,
+        espnPercentOwned: espn.percentOwned,
+        espnPercentStarted: espn.percentStarted,
+        espnTotalRanking: espn.totalRanking,
+        espnPositionalRanking: espn.positionalRanking,
+      };
+    });
+
+    // Combine skaters and goalies
+    const combined = [...skaters, ...goalies];
+
+    // Log matching stats
+    console.log(`🔗 Matched ${matchedCount} out of ${combined.length} NHL players (${skaters.length} skaters, ${goalies.length} goalies) with ESPN data`);
+
+    // Log a sample player and goalie to verify ESPN data is included
     if (combined.length > 0) {
-      const sample = combined.find(p => p.espnADP) || combined[0];
-      console.log("📊 Sample player with ESPN data:", {
-        name: sample.skaterFullName,
-        espnADP: sample.espnADP,
-        espnRanking: sample.espnTotalRanking
+      const sampleSkater = skaters.find(p => p.espnADP) || skaters[0];
+      const sampleGoalie = goalies.find(g => g.espnADP) || goalies[0];
+
+      console.log("📊 Sample skater with ESPN data:", {
+        name: sampleSkater?.skaterFullName,
+        espnADP: sampleSkater?.espnADP,
+        espnRanking: sampleSkater?.espnTotalRanking
       });
+
+      if (sampleGoalie) {
+        console.log("🥅 Sample goalie with ESPN data:", {
+          name: sampleGoalie.skaterFullName,
+          espnADP: sampleGoalie.espnADP,
+          espnRanking: sampleGoalie.espnTotalRanking
+        });
+      }
     }
 
     res.json({ total: combined.length, data: combined });

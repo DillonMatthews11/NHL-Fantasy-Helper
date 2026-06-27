@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import './App.css'
 import './styles/mock-draft.css'
 import PlayerStats from './components/PlayerStats'
+import GoalieStats from './components/GoalieStats'
 import DraftSetup from './components/MockDraft/DraftSetup'
 import DraftRoom from './components/MockDraft/DraftRoom'
 import { DraftProvider } from './contexts/DraftContext'
@@ -24,6 +25,12 @@ function Navigation() {
             Player Rankings
           </Link>
           <Link
+            to="/goalies"
+            className={location.pathname === '/goalies' ? 'nav-link active' : 'nav-link'}
+          >
+            Goalie Rankings
+          </Link>
+          <Link
             to="/mock-draft/setup"
             className={location.pathname.includes('/mock-draft') ? 'nav-link active' : 'nav-link'}
           >
@@ -43,6 +50,7 @@ function App() {
           <Navigation />
           <Routes>
             <Route path="/" element={<PlayerStats />} />
+            <Route path="/goalies" element={<GoalieStats />} />
             <Route path="/mock-draft/setup" element={<DraftSetup />} />
             <Route path="/mock-draft/draft-room" element={<DraftRoom />} />
           </Routes>

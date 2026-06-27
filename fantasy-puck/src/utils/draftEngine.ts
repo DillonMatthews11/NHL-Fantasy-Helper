@@ -96,11 +96,40 @@ export function initializeTeamRosters(
 }
 
 /**
+ * Normalize NHL API position codes to fantasy positions
+ * NHL API uses: C, L, R, D
+ * Fantasy uses: C, LW, RW, D, G
+ */
+function normalizePosition(pos: string): Position | null {
+  const normalized = pos.trim().toUpperCase();
+
+  // Map NHL API codes to fantasy positions
+  const positionMap: Record<string, Position> = {
+    'C': 'C',
+    'L': 'LW',
+    'R': 'RW',
+    'D': 'D',
+    'G': 'G',
+    // Also support already-normalized positions
+    'LW': 'LW',
+    'RW': 'RW',
+  };
+
+  return positionMap[normalized] || null;
+}
+
+/**
  * Parse player position string to array of Position types
- * "C/LW" -> ['C', 'LW']
+ * "R" -> ['RW']
+ * "C/L" -> ['C', 'LW']
+ * "R/C" -> ['RW', 'C']
  */
 export function parsePositions(positionCode: string): Position[] {
-  const positions = positionCode.split('/').map(p => p.trim()) as Position[];
+  const positions = positionCode
+    .split('/')
+    .map(p => normalizePosition(p))
+    .filter((p): p is Position => p !== null);
+
   return positions;
 }
 
@@ -157,7 +186,7 @@ export function getAvailablePositionsForPlayer(
 
 /**
  * Assign player to best available roster position
- * Priority: player's actual positions > flex (F) > utility (UTIL) > bench
+ * Priority: player's actual positions (in order) > flex (F) > utility (UTIL) > bench
  */
 export function assignPlayerToRoster(
   player: DraftPlayer,
@@ -174,13 +203,16 @@ export function assignPlayerToRoster(
     return null; // Roster full (shouldn't happen in normal draft)
   }
 
-  // STEP 1: Try to fill player's direct/primary positions first (C, LW, RW, D, G)
-  // These are the positions the player can actually play
+  // STEP 1: Try to fill player's actual positions in the order they appear
+  // For a C/LW player, try C first, then LW
+  // Only check primary positions (not flex/util/bench)
   const primaryPositions: Position[] = ['C', 'LW', 'RW', 'D', 'G'];
-  for (const pos of primaryPositions) {
-    if (player.positions.includes(pos) && available.includes(pos)) {
-      roster.filledPositions[pos]++;
-      return pos;
+
+  for (const playerPos of player.positions) {
+    // Only check if this is a primary position (not F, UTIL, or BENCH)
+    if (primaryPositions.includes(playerPos) && available.includes(playerPos)) {
+      roster.filledPositions[playerPos]++;
+      return playerPos;
     }
   }
 
